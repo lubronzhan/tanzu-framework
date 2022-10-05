@@ -1,0 +1,6 @@
+apiVersion: lb.tanzu.vmware.com/v1alpha1
+kind: KubevipCPConfig
+metadata:
+  name: kubevipcpconfig-sample
+spec:
+  # TODO(user): Add fields here

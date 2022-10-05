@@ -78,3 +78,8 @@ type VSphereCSIConfigControllerConfig struct {
 type AwsEbsCSIConfigControllerConfig struct {
 	ConfigControllerConfig
 }
+
+// KubevipCPConfigControllerConfig contains configuration information of KubevipLBConfig controller
+type KubevipCPConfigControllerConfig struct {
+	ConfigControllerConfig
+}
