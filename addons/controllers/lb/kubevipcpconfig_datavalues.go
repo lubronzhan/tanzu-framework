@@ -8,6 +8,10 @@ import (
 )
 
 type KubevipCloudProviderDataValues struct {
+	KubevipCloudProvider `yaml:"kubevipCloudProvider"`
+}
+
+type KubevipCloudProvider struct {
 	LoadbalancerCIDRs    string `yaml:"loadbalancerCIDRs"`
 	LoadbalancerIPRanges string `yaml:"loadbalancerIPRanges"`
 }
