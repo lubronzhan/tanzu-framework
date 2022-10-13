@@ -12,7 +12,9 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterapiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterapiutil "sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/vmware-tanzu/tanzu-framework/addons/pkg/constants"
@@ -54,7 +56,7 @@ var _ = Describe("KubevipCPConfig Reconciler", func() {
 		}
 	})
 
-	FContext("reconcile KubevipCPConfig manifests in non-paravirtual mode", func() {
+	Context("reconcile KubevipCPConfig manifests", func() {
 		BeforeEach(func() {
 			clusterName = "test-cluster-kvcp"
 			clusterResourceFilePath = "testdata/test-kubevip-cloudprovider-config.yaml"
@@ -76,14 +78,27 @@ var _ = Describe("KubevipCPConfig Reconciler", func() {
 					return false
 				}
 
-				if len(config.OwnerReferences) == 0 {
+				if len(config.OwnerReferences) > 0 {
 					return false
 				}
-				Expect(len(config.OwnerReferences)).Should(Equal(1))
-				Expect(config.OwnerReferences[0].Name).Should(Equal(clusterName))
 
+				Expect(len(config.OwnerReferences)).Should(Equal(0))
 				return true
 			}, waitTimeout, pollingInterval).Should(BeTrue())
+
+			By("patching kubevip cloudprovider with ownerRef as ClusterBootstrapController would do")
+			// patch the KubevipCPConfig with ownerRef
+			patchedKubevipCPConfig := config.DeepCopy()
+			ownerRef := metav1.OwnerReference{
+				APIVersion: clusterapiv1beta1.GroupVersion.String(),
+				Kind:       cluster.Kind,
+				Name:       cluster.Name,
+				UID:        cluster.UID,
+			}
+
+			ownerRef.Kind = "Cluster"
+			patchedKubevipCPConfig.OwnerReferences = clusterapiutil.EnsureOwnerRef(patchedKubevipCPConfig.OwnerReferences, ownerRef)
+			Expect(k8sClient.Patch(ctx, patchedKubevipCPConfig, client.MergeFrom(config))).ShouldNot(HaveOccurred())
 
 			// the data values secret should be generated
 			secret := &v1.Secret{}

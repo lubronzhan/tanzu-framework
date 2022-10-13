@@ -38,8 +38,8 @@ type KubevipCPConfigReconciler struct {
 	Config addonconfig.KubevipCPConfigControllerConfig
 }
 
-//+kubebuilder:rbac:groups=kubevipcpconfig.tanzu.vmware.com,resources=KubevipCPconfigs,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kubevipcpconfig.tanzu.vmware.com,resources=KubevipCPconfigs/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=lb.tanzu.vmware.com,resources=KubevipCPconfigs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=lb.tanzu.vmware.com,resources=KubevipCPconfigs/status,verbs=get;update;patch
 
 // Reconcile the KubevipCPConfig CRD
 func (r *KubevipCPConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
