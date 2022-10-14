@@ -82,5 +82,5 @@ metadata:
   name: test-cluster-kvcp
   namespace: default
 spec:
-  KubevipLoadbalancerIPRanges: 10.0.0.1-10.0.0.2
-  KubevipLoadbalancerCIDRs: 10.0.0.1/24
+  kubevipLoadbalancerIPRanges: 10.0.0.1-10.0.0.2
+  kubevipLoadbalancerCIDRs: 10.0.0.1/24

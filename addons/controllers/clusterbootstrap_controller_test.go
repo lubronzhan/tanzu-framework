@@ -30,6 +30,7 @@ import (
 	antreaconfigv1alpha1 "github.com/vmware-tanzu/tanzu-framework/apis/addonconfigs/cni/v1alpha1"
 	vspherecpiv1alpha1 "github.com/vmware-tanzu/tanzu-framework/apis/addonconfigs/cpi/v1alpha1"
 	vspherecsiv1alpha1 "github.com/vmware-tanzu/tanzu-framework/apis/addonconfigs/csi/v1alpha1"
+	lbv1alpha1 "github.com/vmware-tanzu/tanzu-framework/apis/addonconfigs/lb/v1alpha1"
 	runtanzuv1alpha3 "github.com/vmware-tanzu/tanzu-framework/apis/run/v1alpha3"
 
 	"github.com/vmware-tanzu/tanzu-framework/addons/pkg/constants"
@@ -1153,87 +1154,68 @@ var _ = Describe("ClusterBootstrap Reconciler", func() {
 			}
 			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 		})
-		Context("When providerRef exists", func() {
-			It("Should create package install for antrea with package datavalues for secret and "+
-				"update package install for antrea with renamed secret as controller is watching for changes to providerRef", func() {
 
-				By("setting cluster phase to provisioned")
+		Context("from a ClusterBootstrap", func() {
+			It("should perform ClusterBootstrap reconciliation", func() {
+
+				By("verifying CAPI cluster is created properly")
 				cluster := &clusterapiv1beta1.Cluster{}
 				Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: clusterNamespace, Name: clusterName}, cluster)).To(Succeed())
 				cluster.Status.Phase = string(clusterapiv1beta1.ClusterPhaseProvisioned)
 				Expect(k8sClient.Status().Update(ctx, cluster)).To(Succeed())
 
-				Eventually(func(g Gomega) {
-					providerName := fmt.Sprintf("%s-antrea-package", clusterName)
-					gvr := schema.GroupVersionResource{Group: "run.tanzu.vmware.com", Version: "v1alpha1", Resource: "foobars"}
-					provider, err := dynamicClient.Resource(gvr).Namespace(clusterNamespace).Get(ctx, providerName, metav1.GetOptions{})
-					g.Expect(err).ToNot(HaveOccurred())
-
-					s := &corev1.Secret{}
-					s.Name = util.GenerateDataValueSecretName(clusterName, "antrea.tanzu.vmware.com.1.10.5--vmware.1-tkg.2")
-					s.Namespace = clusterNamespace
-					s.StringData = map[string]string{}
-					s.StringData["values.yaml"] = foobar
-					err = k8sClient.Create(ctx, s)
-
-					if err != nil {
-						g.Expect(apierrors.IsAlreadyExists(err)).To(BeTrue())
-					}
-					g.Expect(unstructured.SetNestedField(provider.Object, s.Name, "status", "secretRef")).To(Succeed())
-
-					_, err = dynamicClient.Resource(gvr).Namespace(clusterNamespace).UpdateStatus(ctx, provider, metav1.UpdateOptions{})
-					g.Expect(err).ToNot(HaveOccurred())
-
-					pkgiName := util.GeneratePackageInstallName(clusterName, "antrea.tanzu.vmware.com.1.10.5--vmware.1-tkg.2")
-					pkgi := &kapppkgiv1alpha1.PackageInstall{}
-					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: constants.TKGSystemNS, Name: pkgiName}, pkgi)).To(Succeed())
-
-					g.Expect(len(pkgi.Spec.Values) > 0).To(BeTrue())
-
-					dataValueSecret := pkgi.Spec.Values[0].SecretRef.Name
-					dataValuesGenerated := &corev1.Secret{}
-
-					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: constants.TKGSystemNS, Name: dataValueSecret}, dataValuesGenerated)).To(Succeed())
-					g.Expect(string(dataValuesGenerated.Data["values.yaml"])).To(Equal(foobar))
-				}, waitTimeout, pollingInterval).Should(Succeed())
-
-				Eventually(func(g Gomega) {
-					providerName := fmt.Sprintf("%s-antrea-package", clusterName)
-					gvr := schema.GroupVersionResource{Group: "run.tanzu.vmware.com", Version: "v1alpha1", Resource: "foobars"}
-					provider, err := dynamicClient.Resource(gvr).Namespace(clusterNamespace).Get(ctx, providerName, metav1.GetOptions{})
-					g.Expect(err).ToNot(HaveOccurred())
-
-					// update the secret in provider
-					s := &corev1.Secret{}
-					s.Name = "updated-antrea-secret"
-					s.Namespace = clusterNamespace
-					s.StringData = map[string]string{}
-					s.StringData["values.yaml"] = "foobarbaz"
-					err = k8sClient.Create(ctx, s)
-
-					if err != nil {
-						g.Expect(apierrors.IsAlreadyExists(err)).To(BeTrue())
+				By("patching kubevip cloudprovider with ownerRef as ClusterBootstrapController would do")
+				// the kvcp config object should be deployed
+				config := &lbv1alpha1.KubevipCPConfig{}
+				key := client.ObjectKey{
+					Namespace: clusterNamespace,
+					Name:      clusterName,
+				}
+				Eventually(func() bool {
+					if err := k8sClient.Get(ctx, key, config); err != nil {
+						return false
 					}
 
-					g.Expect(unstructured.SetNestedField(provider.Object, s.Name, "status", "secretRef")).To(Succeed())
+					if len(config.OwnerReferences) > 0 {
+						return false
+					}
 
-					_, err = dynamicClient.Resource(gvr).Namespace(clusterNamespace).UpdateStatus(ctx, provider, metav1.UpdateOptions{})
-					g.Expect(err).ToNot(HaveOccurred())
+					Expect(len(config.OwnerReferences)).Should(Equal(0))
+					return true
+				}, waitTimeout, pollingInterval).Should(BeTrue())
 
-					pkgiName := util.GeneratePackageInstallName(clusterName, "antrea.tanzu.vmware.com.1.10.5--vmware.1-tkg.2")
-					pkgi := &kapppkgiv1alpha1.PackageInstall{}
-					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: constants.TKGSystemNS, Name: pkgiName}, pkgi)).To(Succeed())
+				// patch the KubevipCPConfig with ownerRef
+				patchedKubevipCPConfig := config.DeepCopy()
+				ownerRef := metav1.OwnerReference{
+					APIVersion: clusterapiv1beta1.GroupVersion.String(),
+					Kind:       cluster.Kind,
+					Name:       cluster.Name,
+					UID:        cluster.UID,
+				}
 
-					g.Expect(len(pkgi.Spec.Values) > 0).To(BeTrue())
+				ownerRef.Kind = "Cluster"
+				patchedKubevipCPConfig.OwnerReferences = clusterapiutil.EnsureOwnerRef(patchedKubevipCPConfig.OwnerReferences, ownerRef)
+				Expect(k8sClient.Patch(ctx, patchedKubevipCPConfig, client.MergeFrom(config))).ShouldNot(HaveOccurred())
 
-					dataValueSecret := pkgi.Spec.Values[0].SecretRef.Name
-					dataValuesGenerated := &corev1.Secret{}
-					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: constants.TKGSystemNS, Name: dataValueSecret}, dataValuesGenerated)).To(Succeed())
-
-					g.Expect(string(dataValuesGenerated.Data["values.yaml"])).To(Equal("foobarbaz"))
-
-				}, waitTimeout, pollingInterval).Should(Succeed())
-
+				By("Should have remote secret value created for kubevip cloud provider")
+				remoteClient, err := util.GetClusterClient(ctx, k8sClient, scheme, clusterapiutil.ObjectKey(cluster))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(remoteClient).NotTo(BeNil())
+				remoteSecret := &corev1.Secret{}
+				Eventually(func() bool {
+					err = remoteClient.Get(ctx, client.ObjectKey{Namespace: clusterNamespace, Name: util.GenerateDataValueSecretName(clusterName, constants.KubevipCloudProviderAddonName)}, remoteSecret)
+					if err != nil {
+						return false
+					}
+					Expect(remoteSecret.Data).To(HaveKey("values.yaml"))
+					valueTexts, ok := remoteSecret.Data["values.yaml"]
+					if !ok {
+						return false
+					}
+					Expect(strings.Contains(string(valueTexts), "loadbalancerCIDRs: 10.0.0.1/24")).Should(BeTrue())
+					Expect(strings.Contains(string(valueTexts), "loadbalancerIPRanges: 10.0.0.1-10.0.0.2")).Should(BeTrue())
+					return true
+				}, waitTimeout, pollingInterval).Should(BeTrue())
 			})
 		})
 	})

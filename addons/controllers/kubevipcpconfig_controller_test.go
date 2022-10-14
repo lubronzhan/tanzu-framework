@@ -113,8 +113,8 @@ var _ = Describe("KubevipCPConfig Reconciler", func() {
 				secretData := string(secret.Data["values.yaml"])
 				Expect(len(secretData)).ShouldNot(BeZero())
 				Expect(strings.Contains(secretData, "kubevipCloudProvider:")).Should(BeTrue())
-				Expect(strings.Contains(secretData, "loadbalancerCIDRs:")).Should(BeTrue())
-				Expect(strings.Contains(secretData, "loadbalancerIPRanges:")).Should(BeTrue())
+				Expect(strings.Contains(secretData, "loadbalancerCIDRs: 10.0.0.1/24")).Should(BeTrue())
+				Expect(strings.Contains(secretData, "loadbalancerIPRanges: 10.0.0.1-10.0.0.2")).Should(BeTrue())
 
 				return true
 			}, waitTimeout, pollingInterval).Should(BeTrue())
