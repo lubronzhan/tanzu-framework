@@ -328,6 +328,11 @@ spec:
     schema:
       openAPIV3Schema:
         type: integer
+  - name: kubeVipLoadBalancerProvider
+    required: false
+    schema:
+      type: boolean
+        default: false
   - name: trust
     required: false
     schema:
@@ -686,6 +691,8 @@ spec:
                   env:
                   - name: cp_enable
                     value: "true"
+                  - name: svc_enable
+                    value: "{{ .kubeVipLoadBalancerProvider }}"
                   - name: vip_arp
                     value: "true"
                   - name: vip_leaderelection
